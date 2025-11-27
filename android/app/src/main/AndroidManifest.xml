@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<uses-permisssion android:name"android.permission.INTERNET"/>
+<uses-permisssion android:name"android.permission.READ_EXTERNAL_STORAGE"/> 
+
     <application
         android:label="firebase_crudenote"
         android:name="${applicationName}"

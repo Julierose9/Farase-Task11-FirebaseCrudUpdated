@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:image_picker/image_picker.dart';
 import 'crud_service.dart';
 
 class HomePage extends StatefulWidget {
@@ -19,7 +22,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    showFavoritesOnly = false; // ⭐ FIX: Always start with "All Items"
+    showFavoritesOnly = false;
   }
 
   @override
@@ -28,14 +31,13 @@ class _HomePageState extends State<HomePage> {
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
         title: const Text(
-          'Farase Notes',
+          'Firebase Farase',
           style: TextStyle(fontWeight: FontWeight.w500),
         ),
         centerTitle: true,
         backgroundColor: Colors.pink[900],
         foregroundColor: Colors.white,
 
-        // 🔥 FAVORITE FILTER BUTTON
         actions: [
           IconButton(
             icon: Icon(
@@ -56,7 +58,6 @@ class _HomePageState extends State<HomePage> {
         onPressed: () => _openAddDialog(context),
       ),
 
-      // STREAM BASED ON FILTER
       body: StreamBuilder<QuerySnapshot>(
         stream: showFavoritesOnly
             ? service.getFavoriteItems()
@@ -80,12 +81,11 @@ class _HomePageState extends State<HomePage> {
             itemBuilder: (context, index) {
               var item = docs[index];
 
-              // ⭐ FIX ADDED HERE (PREVENT CRASH)
-              var data = item.data() as Map<String, dynamic>;
-              bool fav = data.containsKey("favorite")
-                  ? data["favorite"]
-                  : false;
-
+              final data = item.data() as Map<String, dynamic>;
+              final bool isFavorite = data['favorite'] == true;
+              final imageUrl = data ['image_url'];
+              
+              
               return Card(
                 elevation: 3,
                 shape: RoundedRectangleBorder(
@@ -97,32 +97,45 @@ class _HomePageState extends State<HomePage> {
                     horizontal: 16,
                     vertical: 8,
                   ),
+
+                  leading: imageUrl != null
+                  ? ClipRRect(
+                    borderRadius: BorderRadiusGeometry.circular(8),
+                    child: Image.network(
+                      imageUrl,
+                      width: 60,
+                      height: 60,
+                      fit: BoxFit.cover,
+                    ),
+                  )
+                  : null,
                   title: Text(
-                    data['name'],
+                    data['name'] ?? '',
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   subtitle: Text(
-                    "Quantity ${data['quantity']}",
+                    "Quantity ${data['quantity'] ?? 0}",
                     style: const TextStyle(fontSize: 14, color: Colors.grey),
                   ),
 
-                  // ❤️ FAVORITE BUTTON
-                  leading: IconButton(
-                    icon: Icon(
-                      fav ? Icons.favorite : Icons.favorite_border,
-                      color: fav ? Colors.red : Colors.grey,
-                    ),
-                    onPressed: () {
-                      service.toggleFavorite(item.id, !fav);
-                    },
-                  ),
+                  
 
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      IconButton(
+                        icon: Icon(
+                          isFavorite ? Icons.favorite : Icons.favorite_border,
+                          color: isFavorite ? Colors.red : Colors.grey,
+                        ),
+                        onPressed: () {
+                          service.toggleFavorite(item.id, !isFavorite);
+                        },
+                      ),
+                      
                       IconButton(
                         icon: const Icon(Icons.edit, color: Colors.green),
                         onPressed: () => _openEditDialog(context, item),
@@ -157,6 +170,11 @@ class _HomePageState extends State<HomePage> {
               Navigator.pop(context);
             },
           ),
+          TextButton(
+            child: const Text('Cancel'),
+            onPressed:() => Navigator.pop(context),
+            ),
+
         ],
       ),
     );
@@ -167,9 +185,12 @@ class _HomePageState extends State<HomePage> {
     nameCtrl.clear();
     qtyCtrl.clear();
 
+    File?  selectedImageFile;
+    String? selectedImageUrl;
+
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (_) => StatefulBuilder(builder : (context, setState) => AlertDialog(
         title: const Text("Add item"),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -183,7 +204,7 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
+            
             TextField(
               controller: qtyCtrl,
               decoration: InputDecoration(
@@ -192,7 +213,34 @@ class _HomePageState extends State<HomePage> {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
+              keyboardType: TextInputType.number,
             ),
+            const SizedBox(height: 12),
+            if (selectedImageFile != null)
+            ClipRRect(
+              borderRadius: BorderRadiusGeometry.circular(8),
+              child: Image.file(
+                selectedImageFile!,
+                width: 120,
+                height: 120,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.upload_file),
+              label:  const Text('upload image'),
+              onPressed: () async {
+                final pickedFile = await service.pickImageForAddItem();
+                if (pickedFile != null) {
+                  setState(() {
+                    selectedImageFile = pickedFile.file;
+                    selectedImageUrl = pickedFile.url;
+                  });
+                }
+              },
+
+            )
           ],
         ),
         actions: [
@@ -208,15 +256,20 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
             child: const Text("Save"),
-            onPressed: () {
+            onPressed: ()  async {
               if (nameCtrl.text.isNotEmpty && qtyCtrl.text.isNotEmpty) {
-                service.addItem(nameCtrl.text, int.parse(qtyCtrl.text));
-                Navigator.pop(context);
+                await service.addItemwithImage(
+                  nameCtrl.text,
+                  int.parse(qtyCtrl.text),
+                  selectedImageUrl,
+                );
+              Navigator.pop(context);
               }
             },
           ),
         ],
       ),
+      )
     );
   }
 
